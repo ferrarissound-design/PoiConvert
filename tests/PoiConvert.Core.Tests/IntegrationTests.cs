@@ -130,7 +130,7 @@ public class IntegrationTests : IClassFixture<IntegrationFixture>
         Assert.Equal(854, m.Width);
         Assert.Equal("h264", m.VideoCodec);
         Assert.Equal("aac", m.AudioCodec);
-        Assert.Contains(progress, p => p > 0 && p < 1); // 途中の進捗が来ている
+        Assert.Equal(1.0, progress[^1], 6);
     }
 
     [SkippableFact]
@@ -267,12 +267,16 @@ public class IntegrationTests : IClassFixture<IntegrationFixture>
         var o = new ConversionOptions { Mode = ConversionMode.Compress, X264Preset = "veryslow" };
         using var cts = new CancellationTokenSource();
         var sawProgress = new TaskCompletionSource();
-        var progress = new SyncProgress(new List<double>(), p => { if (p > 0) sawProgress.TrySetResult(); });
+        var reported = new List<double>();
+        var progress = new SyncProgress(reported, p => { if (p > 0) sawProgress.TrySetResult(); });
 
         var task = svc.ConvertAsync(longSrc, media, o, new OutputSettings { ToSourceFolder = false, Folder = dir },
             progress, null, cts.Token);
         await Task.WhenAny(sawProgress.Task, Task.Delay(30_000));
         Assert.True(Directory.EnumerateFiles(dir).Any(), "変換中の出力ファイルができているはず");
+        // 変換の途中で -progress の進捗（0〜1 の間）が届いている
+        lock (reported)
+            Assert.Contains(reported, p => p > 0 && p < 1);
         cts.Cancel();
         var r = await task;
 
