@@ -1,0 +1,68 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore PoiConvert.sln
+
+      - name: Build
+        run: dotnet build PoiConvert.sln -c Release --no-restore
+
+      # 結合テスト（本物の ffmpeg で各モードを変換）用。リリース時と同じ取得スクリプトの動作確認も兼ねる。
+      # 取得に失敗しても結合テストがスキップされるだけで、ユニットテストは実行される。
+      - name: Download FFmpeg for integration tests
+        id: ffmpeg
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./build/Get-FFmpeg.ps1 -Destination "$env:RUNNER_TEMP/ffmpeg"
+
+      - name: Test
+        env:
+          POICONVERT_FFMPEG: ${{ steps.ffmpeg.outcome == 'success' && format('{0}/ffmpeg', runner.temp) || '' }}
+        run: dotnet test PoiConvert.sln -c Release --no-build --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: tests/**/TestResults/*.trx
+          if-no-files-found: ignore
+
+      # 動作確認用：ブランチのビルドをそのまま試せるように exe をアーティファクトに置く
+      - name: Publish exe (preview)
+        run: >
+          dotnet publish src/PoiConvert/PoiConvert.csproj -c Release -r win-x64
+          --self-contained true -p:PublishSingleFile=true -o publish
+
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: PoiConvert-preview-exe
+          path: publish/PoiConvert.exe
+          retention-days: 14

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    UI から独立したロジック（コマンド組み立て・ffprobe解析・出力名・プロセス実行）。
+    net8.0 にしているので Linux / Windows どちらでもユニットテストできる。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>PoiConvert.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PoiConvert.Core.Tests" />
+  </ItemGroup>
+
+</Project>

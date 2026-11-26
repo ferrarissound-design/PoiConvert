@@ -1,0 +1,148 @@
+name: release
+
+# Actions タブ → release → 「Run workflow」で version（例: 1.0.0）を入力して実行する
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "リリースするバージョン（例: 1.0.0）。タグ v{version} が作られます"
+        required: true
+        type: string
+
+# タグと GitHub Release を作るために contents: write が必要
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version and check tag does not exist
+        shell: pwsh
+        run: |
+          $v = $env:VERSION.Trim()
+          if ($v -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            Write-Host "::error::version は 1.0.0 や 1.2.3-beta.1 の形式で入力してください（入力値: '$v'）"
+            exit 1
+          }
+          $tag = "v$v"
+          git fetch --tags --force
+          $remote = git ls-remote --tags origin "refs/tags/$tag"
+          if ($remote -or (git tag --list $tag)) {
+            Write-Host "::error::タグ $tag はすでに存在します。別の version を指定してください。"
+            exit 1
+          }
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "::error::Release $tag はすでに存在します。"
+            exit 1
+          }
+          "TAG=$tag" >> $env:GITHUB_ENV
+          Write-Host "OK: $tag"
+          exit 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Download FFmpeg (BtbN/FFmpeg-Builds, win64 GPL)
+        id: ffmpeg
+        shell: pwsh
+        run: ./build/Get-FFmpeg.ps1 -Destination ffmpeg
+
+      # 同梱する ffmpeg そのもので結合テストも実行する
+      - name: Test
+        env:
+          POICONVERT_FFMPEG: ${{ github.workspace }}/ffmpeg
+        run: dotnet test PoiConvert.sln -c Release
+
+      - name: Publish (win-x64, self-contained, single file)
+        shell: pwsh
+        run: |
+          dotnet publish src/PoiConvert/PoiConvert.csproj -c Release -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=$env:VERSION `
+            -o publish
+          if (-not (Test-Path publish/PoiConvert.exe)) { throw "PoiConvert.exe が作成されませんでした" }
+
+      - name: Download FFmpeg source for this build (GPL)
+        id: ffsrc
+        continue-on-error: true
+        shell: pwsh
+        env:
+          FF_COMMIT: ${{ steps.ffmpeg.outputs.commit }}
+        run: |
+          if (-not $env:FF_COMMIT) { Write-Host "::warning::FFmpeg のコミットを特定できなかったため、ソースアーカイブは添付しません（リンクのみ）"; exit 0 }
+          $out = "dist/ffmpeg-source-$env:FF_COMMIT.tar.gz"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/FFmpeg/FFmpeg/archive/$env:FF_COMMIT.tar.gz" -OutFile $out
+          "file=$out" >> $env:GITHUB_OUTPUT
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item publish/PoiConvert.exe dist/PoiConvert.exe
+
+          $stage = "stage/PoiConvert-with-ffmpeg-v$env:VERSION"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item publish/PoiConvert.exe $stage/
+          Copy-Item ffmpeg/ffmpeg.exe, ffmpeg/ffprobe.exe, ffmpeg/FFMPEG-LICENSE.txt, ffmpeg/FFMPEG-SOURCE.txt $stage/
+          Copy-Item README.md $stage/README.md
+          $zip = "dist/PoiConvert-with-ffmpeg-v$env:VERSION.zip"
+          Compress-Archive -Path "$stage/*" -DestinationPath $zip -Force
+
+          Get-ChildItem dist | Format-Table Name, Length
+          Get-FileHash dist/* -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content -Encoding utf8 dist/SHA256SUMS.txt
+          Get-Content dist/SHA256SUMS.txt
+
+      - name: Create tag and GitHub Release
+        shell: pwsh
+        env:
+          FF_ASSET: ${{ steps.ffmpeg.outputs.asset }}
+          FF_VERSION: ${{ steps.ffmpeg.outputs.version }}
+          FF_COMMIT: ${{ steps.ffmpeg.outputs.commit }}
+        run: |
+          $notes = @"
+          ## ダウンロード
+
+          | ファイル | こんな人向け |
+          |---|---|
+          | **PoiConvert-with-ffmpeg-v$env:VERSION.zip** | **迷ったらこちら。** 展開して PoiConvert.exe を起動するだけで使えます（FFmpeg 同梱） |
+          | PoiConvert.exe | FFmpeg をすでに持っている人向け（本体のみ）。ffmpeg.exe / ffprobe.exe を同じフォルダに置くか、アプリの設定で場所を指定してください |
+
+          インストール不要です（.NET のインストールも不要）。
+
+          ## 同梱 FFmpeg
+
+          - ビルド: ``$env:FF_ASSET``（[BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds)）
+          - バージョン: ``$env:FF_VERSION``
+          - ライセンス: GPLv3（zip 内の FFMPEG-LICENSE.txt / FFMPEG-SOURCE.txt を参照）
+          - ソース: https://github.com/FFmpeg/FFmpeg$(if ($env:FF_COMMIT) { "/tree/$env:FF_COMMIT" })
+
+          SHA-256 は SHA256SUMS.txt を参照してください。
+          "@
+          $notes | Set-Content -Encoding utf8 notes.md
+
+          $files = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
+          gh release create $env:TAG $files `
+            --target $env:GITHUB_SHA `
+            --title "PoiConvert $env:TAG" `
+            --notes-file notes.md
+          if ($LASTEXITCODE -ne 0) { throw "gh release create に失敗しました" }

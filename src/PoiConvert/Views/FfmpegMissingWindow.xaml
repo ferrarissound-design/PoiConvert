@@ -1,0 +1,53 @@
+<Window x:Class="PoiConvert.Views.FfmpegMissingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FFmpeg の設定" Width="620" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False"
+        FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI" FontSize="13">
+  <StackPanel Margin="18">
+    <TextBlock FontSize="16" FontWeight="Bold" Text="FFmpeg（ffmpeg.exe / ffprobe.exe）が必要です" Margin="0,0,0,10" />
+    <TextBlock TextWrapping="Wrap">
+      PoiConvert は変換処理に無料ソフトの FFmpeg を使います。次のどれかの方法で用意してください。
+    </TextBlock>
+
+    <TextBlock FontWeight="Bold" Margin="0,14,0,4" Text="方法1（いちばん簡単）：同梱版をダウンロード" />
+    <TextBlock TextWrapping="Wrap">
+      GitHub の Releases から「PoiConvert-with-ffmpeg-v○○.zip」をダウンロードして展開し、中の PoiConvert.exe を使ってください。
+    </TextBlock>
+    <TextBlock Margin="0,4,0,0">
+      <Hyperlink NavigateUri="https://github.com/ferrarissound-design/PoiConvert/releases/latest" RequestNavigate="Link_RequestNavigate">
+        PoiConvert の Releases ページを開く
+      </Hyperlink>
+    </TextBlock>
+
+    <TextBlock FontWeight="Bold" Margin="0,14,0,4" Text="方法2：FFmpeg を自分で入手して置く" />
+    <TextBlock TextWrapping="Wrap">
+      Windows 用ビルド（例：BtbN の「ffmpeg-…-win64-gpl.zip」）をダウンロードして展開し、
+      bin フォルダの中の <Run FontWeight="Bold">ffmpeg.exe と ffprobe.exe</Run> を
+      <Run FontWeight="Bold">PoiConvert.exe と同じフォルダ</Run>にコピーして、PoiConvert を起動し直してください。
+    </TextBlock>
+    <TextBlock Margin="0,4,0,0">
+      <Hyperlink NavigateUri="https://github.com/BtbN/FFmpeg-Builds/releases" RequestNavigate="Link_RequestNavigate">
+        BtbN/FFmpeg-Builds（GitHub）
+      </Hyperlink>
+      <Run Text="　" />
+      <Hyperlink NavigateUri="https://ffmpeg.org/download.html" RequestNavigate="Link_RequestNavigate">
+        ffmpeg.org のダウンロードページ
+      </Hyperlink>
+    </TextBlock>
+
+    <TextBlock FontWeight="Bold" Margin="0,14,0,4" Text="方法3：すでにある ffmpeg.exe の場所を指定する" />
+    <TextBlock TextWrapping="Wrap" Text="ffmpeg.exe を選んでください（同じフォルダに ffprobe.exe も必要です）。" />
+    <DockPanel Margin="0,6,0,0">
+      <Button DockPanel.Dock="Right" Content="ffmpeg.exe を指定…" Padding="12,4" Margin="6,0,0,0" Click="Browse_Click" />
+      <TextBox x:Name="PathBox" VerticalContentAlignment="Center" />
+    </DockPanel>
+    <TextBlock Foreground="#666" Margin="0,8,0,0" TextWrapping="Wrap"
+               Text="探す順番：① PoiConvert.exe と同じフォルダ → ② ここで指定したパス → ③ 環境変数 PATH" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+      <Button Content="この場所を使う" IsDefault="True" Padding="16,4" Margin="0,0,6,0" Click="Ok_Click" />
+      <Button Content="閉じる" IsCancel="True" Padding="16,4" />
+    </StackPanel>
+  </StackPanel>
+</Window>

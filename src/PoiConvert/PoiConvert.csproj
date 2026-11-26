@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- Linux / macOS 上でもビルドだけはできるようにする（実行は Windows のみ） -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>PoiConvert</AssemblyName>
+    <RootNamespace>PoiConvert</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyTitle>PoiConvert - 動画・音声 爆速コンバーター</AssemblyTitle>
+    <Description>FFmpeg を使った動画・音声変換ツール</Description>
+    <SatelliteResourceLanguages>ja</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- dotnet publish -r win-x64 のときの単一ファイル設定 -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PoiConvert.Core\PoiConvert.Core.csproj" />
+  </ItemGroup>
+
+</Project>
